@@ -1,5 +1,5 @@
-package com.distribuidoraferreira.backend.services.interfaces;
+// package com.distribuidoraferreira.backend.services.interfaces;
 
-public interface KeepRenderOnService {
-    void keepRenderOn();
-}
+// public interface KeepRenderOnService {
+//     void keepRenderOn();
+// }
