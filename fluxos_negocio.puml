@@ -1,0 +1,205 @@
+@startuml Distribuidora Ferreira - Fluxos de Negócio
+!theme vibrant
+skinparam titleFontSize 20
+skinparam activityArrowFontSize 12
+
+title Fluxos de Negócio Principais - Distribuidora Ferreira
+
+|#LightBlue|Gestão de Caixa|
+start
+:Abrir Caixa;
+note right
+  * Define valor inicial
+  * Apenas 1 caixa aberto por vez
+  * Status: ABERTO
+end note
+
+partition "Durante o Dia" {
+  repeat
+    :Processar Vendas;
+    :Atualizar Faturamento;
+  repeat while (Caixa Aberto?)
+}
+
+:Fechar Caixa;
+note right
+  * Calcula faturamento total
+  * Status: FECHADO
+  * Valor final = inicial + faturamento
+end note
+stop
+
+|#LightGreen|Gestão de Estoque|
+start
+fork
+  :Registrar Compra;
+  note right
+    * Tipo: ENTRADA
+    * Aumenta estoque
+    * Registra fornecedor
+  end note
+  
+  :Atualizar Estoque;
+  :Criar Movimentação ENTRADA;
+fork again
+  :Processar Venda;
+  note right
+    * Tipo: SAIDA
+    * Diminui estoque
+    * Valida disponibilidade
+  end note
+  
+  :Verificar Estoque;
+  if (Estoque < Mínimo?) then (sim)
+    :Alertar Baixo Estoque;
+  endif
+  
+  :Criar Movimentação SAIDA;
+fork again
+  :Registrar Perda;
+  note right
+    * Tipo: PERDA
+    * Produtos danificados/vencidos
+    * Diminui estoque
+  end note
+  
+  :Criar Movimentação PERDA;
+end fork
+stop
+
+|#LightCoral|Venda Simples (À Vista)|
+start
+:Selecionar Produtos;
+:Calcular Total;
+:Escolher Método Pagamento;
+note right
+  * PIX
+  * DINHEIRO
+  * DÉBITO
+  * CRÉDITO
+end note
+
+:Registrar Venda;
+:Atualizar Caixa;
+:Gerar Movimentações SAIDA;
+:Status: PAGO;
+stop
+
+|#LightYellow|Venda Fiado (Conta Cliente)|
+start
+:Selecionar Cliente;
+if (Cliente Existe?) then (não)
+  :Criar Conta Cliente;
+  note right
+    * Nome + Telefone
+    * Status: ATIVO
+    * Saldo Devedor: 0
+  end note
+endif
+
+:Selecionar Produtos;
+:Calcular Total;
+:Registrar Venda;
+note right
+  * Método: À DEFINIR
+  * Status: PENDENTE
+end note
+
+:Adicionar ao Saldo Devedor;
+:Cliente Status: INADIMPLENTE;
+:Gerar Movimentações SAIDA;
+stop
+
+|#Lavender|Sistema de Comandas|
+start
+:Abrir Comanda;
+note right
+  * Vincula a Cliente
+  * Status: ABERTA
+  * Múltiplas vendas
+end note
+
+repeat
+  :Adicionar Itens;
+  :Criar Venda Parcial;
+  note right
+    * Status: PENDENTE
+    * Vinculada à Comanda
+  end note
+  
+  :Atualizar Saldo Devedor;
+repeat while (Comanda Aberta?)
+
+:Fechar Comanda;
+:Escolher Método Pagamento;
+
+if (Pagamento Total?) then (sim)
+  :Zerar Saldo Devedor;
+  :Status Vendas: PAGO;
+  :Cliente Status: ATIVO;
+else (parcial)
+  :Atualizar Saldo Devedor;
+  :Cliente Status: INADIMPLENTE;
+endif
+
+:Comanda Status: FECHADA;
+stop
+
+|#LightGreen|Pagamento de Conta|
+start
+:Selecionar Cliente;
+:Exibir Saldo Devedor;
+:Exibir Vendas Pendentes;
+:Informar Valor Pagamento;
+:Escolher Método Pagamento;
+
+if (Valor >= Saldo?) then (sim)
+  :Zerar Saldo Devedor;
+  :Marcar Vendas: PAGO;
+  :Cliente Status: ATIVO;
+else (parcial)
+  :Reduzir Saldo Devedor;
+  :Distribuir Pagamento nas Vendas;
+  :Cliente Status: INADIMPLENTE;
+endif
+
+:Registrar Pagamento;
+:Atualizar Caixa;
+stop
+
+|#LightCyan|Gestão de Produtos|
+start
+fork
+  :Cadastrar Produto;
+  note right
+    * Código de Barras (único)
+    * Categoria
+    * Preço Venda
+    * Preço Consumo (comanda)
+    * Upload Imagem (Uploadcare)
+    * Estoque Mínimo
+  end note
+fork again
+  :Atualizar Produto;
+  note right
+    * Alterar preços
+    * Mudar categoria
+    * Atualizar imagem
+    * Definir estoque mínimo
+  end note
+fork again
+  :Consultar Estoque;
+  if (Estoque < Mínimo?) then (sim)
+    :Destacar Produto;
+    :Sugerir Compra;
+  endif
+fork again
+  :Deletar Produto;
+  note right
+    * Remove produto
+    * Mantém histórico de movimentações
+  end note
+end fork
+stop
+
+@enduml

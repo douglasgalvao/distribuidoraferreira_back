@@ -1,0 +1,241 @@
+@startuml Distribuidora Ferreira - Modelo de Entidades
+!define Table(name,desc) class name as "desc" << (T,#FFAAAA) >>
+!define primary_key(x) <b><color:red>PK: x</color></b>
+!define foreign_key(x) <color:blue>FK: x</color>
+!define unique(x) <color:green>UK: x</color>
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+title Modelo de Entidades - Sistema Distribuidora Ferreira
+
+' ==================== ENTIDADES ====================
+
+class Produto {
+  {field} primary_key(produto_id): Long
+  {field} unique(cod_barras): String
+  {field} nome: String
+  {field} preco: Double
+  {field} preco_consumo: Double
+  {field} img: String
+  {field} imgID: String
+  {field} estoque: Integer
+  {field} estoque_minimo: Integer
+  {field} foreign_key(categoria): Long
+  --
+  + aumentarQuantidadeEstoque(int)
+  + diminuirQuantidadeEstoque(int)
+}
+
+class Categoria {
+  {field} primary_key(categoria_id): Long
+  {field} nome: String (max 50)
+}
+
+class MovimentacaoEstoque {
+  {field} primary_key(id_movimentacao): Long
+  {field} quantidade: Integer
+  {field} horario_registro: Timestamp
+  {field} tipo: TipoMovimentacao
+  {field} observacao: String
+  {field} valor_total_movimentacao: Double
+  {field} preco_unitario: Double
+  {field} foreign_key(produto_id): Long
+  {field} foreign_key(compra_id): Long
+  {field} foreign_key(venda_id): Long
+  --
+  + calcularValorTotalMovimentacao(): Double
+}
+
+enum TipoMovimentacao {
+  ENTRADA
+  SAIDA
+  PERDA
+}
+
+class Venda {
+  {field} primary_key(venda_id): Long
+  {field} data_hora: Timestamp
+  {field} metodo_pagamento: String
+  {field} total_venda: Double
+  {field} total_pago: Double
+  {field} total_pago_pix: Double
+  {field} total_pago_debito: Double
+  {field} total_pago_credito: Double
+  {field} total_pago_dinheiro: Double
+  {field} status_venda: StatusVenda
+  {field} foreign_key(caixa_id): Long
+  {field} foreign_key(comanda_id): Long
+  {field} foreign_key(conta_cliente_id): Long
+  --
+  + calcularValorTotal(): Double
+}
+
+enum StatusVenda {
+  PAGO
+  PENDENTE
+  CANCELADO
+}
+
+class Compra {
+  {field} primary_key(compra_id): Long
+  {field} data_hora: Timestamp
+  {field} total_compra: Double
+  {field} metodo_pagamento: MetodoPagamento
+  --
+  + calcularValorTotal(): Double
+}
+
+enum MetodoPagamento {
+  PIX
+  DINHEIRO
+  DEBITO
+  CREDITO
+  MISTO
+}
+
+class Caixa {
+  {field} primary_key(caixa_id): Long
+  {field} data_hora: Timestamp
+  {field} status: StatusCaixa
+  {field} valor_inicial: Double
+  {field} faturamento_dia: Double
+  {field} valor_total: Double
+}
+
+enum StatusCaixa {
+  ABERTO
+  FECHADO
+}
+
+class ContaCliente {
+  {field} primary_key(conta_cliente_id): Long
+  {field} nome_cliente: String
+  {field} telefone: String
+  {field} status: StatusCliente
+  {field} saldo_devedor: Double
+  {field} total_pago: Double
+  {field} total_pago_pix: Double
+  {field} total_pago_debito: Double
+  {field} total_pago_credito: Double
+  {field} total_pago_dinheiro: Double
+}
+
+enum StatusCliente {
+  ATIVO
+  INADIMPLENTE
+  BLOQUEADO
+}
+
+class Comanda {
+  {field} primary_key(comanda_id): Long
+  {field} data_hora: Timestamp
+  {field} status: StatusComanda
+  {field} foreign_key(caixa_id): Long
+  {field} foreign_key(conta_cliente_id): Long
+}
+
+enum StatusComanda {
+  ABERTA
+  FECHADA
+  CANCELADA
+}
+
+' ==================== RELACIONAMENTOS ====================
+
+' Produto <-> Categoria
+Produto "N" -- "1" Categoria : pertence a >
+
+' Produto <-> MovimentacaoEstoque
+Produto "1" -- "N" MovimentacaoEstoque : possui >
+
+' MovimentacaoEstoque <-> TipoMovimentacao
+MovimentacaoEstoque "N" -- "1" TipoMovimentacao : tem tipo >
+
+' MovimentacaoEstoque <-> Compra
+Compra "1" -- "N" MovimentacaoEstoque : contém >
+
+' MovimentacaoEstoque <-> Venda
+Venda "1" -- "N" MovimentacaoEstoque : contém >
+
+' Venda <-> StatusVenda
+Venda "N" -- "1" StatusVenda : possui status >
+
+' Venda <-> Caixa
+Caixa "1" -- "N" Venda : registra >
+
+' Venda <-> ContaCliente
+ContaCliente "1" -- "N" Venda : possui >
+
+' Venda <-> Comanda
+Comanda "1" -- "N" Venda : agrupa >
+
+' Comanda <-> StatusComanda
+Comanda "N" -- "1" StatusComanda : possui status >
+
+' Comanda <-> ContaCliente
+ContaCliente "1" -- "N" Comanda : possui >
+
+' ContaCliente <-> StatusCliente
+ContaCliente "N" -- "1" StatusCliente : possui status >
+
+' Compra <-> MetodoPagamento
+Compra "N" -- "1" MetodoPagamento : pago com >
+
+' Caixa <-> StatusCaixa
+Caixa "N" -- "1" StatusCaixa : possui status >
+
+' ==================== NOTAS EXPLICATIVAS ====================
+
+note right of Produto
+  **Produto**: Itens do estoque
+  - Controla quantidade disponível
+  - Possui dois preços: venda e consumo (comanda)
+  - Imagens armazenadas no Uploadcare
+end note
+
+note right of MovimentacaoEstoque
+  **MovimentacaoEstoque**: Histórico completo
+  - ENTRADA: Compras de fornecedores
+  - SAIDA: Vendas para clientes
+  - PERDA: Produtos danificados/vencidos
+  - Calcula valor total automaticamente
+end note
+
+note right of Venda
+  **Venda**: Transações de saída
+  - Pode ser à vista ou fiado (conta cliente)
+  - Suporta múltiplos métodos de pagamento
+  - Vinculada a um caixa aberto
+  - Pode fazer parte de uma comanda
+end note
+
+note right of Comanda
+  **Comanda**: Conta aberta no estabelecimento
+  - Agrupa múltiplas vendas
+  - Vinculada a um cliente
+  - Fechamento gera venda total
+end note
+
+note right of ContaCliente
+  **ContaCliente**: Clientes com crédito
+  - Rastreia saldo devedor
+  - Controla pagamentos por método
+  - Status muda conforme pagamentos
+end note
+
+note right of Caixa
+  **Caixa**: Controle financeiro diário
+  - Um caixa aberto por vez
+  - Registra todas as vendas do dia
+  - Calcula faturamento automaticamente
+end note
+
+note right of Compra
+  **Compra**: Aquisição de mercadorias
+  - Gera movimentações de ENTRADA
+  - Aumenta estoque automaticamente
+  - Registra método de pagamento
+end note
+
+@enduml

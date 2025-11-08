@@ -1,0 +1,246 @@
+@startuml Distribuidora Ferreira - Diagramas de Sequência
+!theme vibrant
+
+title Diagramas de Sequência - Principais Fluxos
+
+' ==================== VENDA SIMPLES ====================
+participant "Frontend" as FE
+participant "VendaController" as VC
+participant "VendaService" as VS
+participant "CaixaService" as CS
+participant "ProdutoService" as PS
+participant "MovimentacaoService" as MS
+database "PostgreSQL" as DB
+
+== Fluxo: Venda Simples (À Vista) ==
+
+FE -> VC: POST /vendas\n{produtos, metodoPagamento}
+activate VC
+
+VC -> VS: addVenda(vendaRequest)
+activate VS
+
+loop Para cada produto
+  VS -> PS: validarEstoque(produtoId, quantidade)
+  activate PS
+  PS -> DB: SELECT estoque FROM produtos
+  PS --> VS: estoque OK
+  deactivate PS
+end
+
+VS -> CS: getCaixaAberto()
+activate CS
+CS -> DB: SELECT * FROM caixas WHERE status='ABERTO'
+CS --> VS: caixa
+deactivate CS
+
+VS -> DB: INSERT INTO vendas
+VS -> DB: INSERT INTO movimentacoes_estoque (SAIDA)
+
+loop Para cada produto
+  VS -> PS: diminuirEstoque(produtoId, quantidade)
+  activate PS
+  PS -> DB: UPDATE produtos SET estoque = estoque - quantidade
+  deactivate PS
+end
+
+VS -> CS: atualizarFaturamento(caixaId, totalVenda)
+activate CS
+CS -> DB: UPDATE caixas SET faturamento_dia += totalVenda
+deactivate CS
+
+VS --> VC: GenericResponse<String>("Venda criada", 201)
+deactivate VS
+
+VC --> FE: HTTP 201 Created
+deactivate VC
+
+== Fluxo: Abertura de Comanda ==
+
+FE -> VC: POST /comandas\n{clienteId}
+activate VC
+
+VC -> VS: addComanda(comandaRequest)
+activate VS
+
+VS -> DB: SELECT * FROM contas_cliente WHERE id = clienteId
+VS -> DB: SELECT * FROM caixas WHERE status='ABERTO'
+
+VS -> DB: INSERT INTO comandas\n(status='ABERTA', cliente_id, caixa_id)
+
+VS --> VC: GenericResponse<String>("Comanda criada", 201)
+deactivate VS
+
+VC --> FE: HTTP 201 Created
+deactivate VC
+
+== Fluxo: Adicionar Item à Comanda ==
+
+FE -> VC: PUT /comandas/{id}/itens\n{produtoId, quantidade}
+activate VC
+
+VC -> VS: addItemComanda(comandaId, itemRequest)
+activate VS
+
+VS -> DB: SELECT * FROM comandas WHERE id = comandaId
+VS -> PS: validarEstoque(produtoId, quantidade)
+activate PS
+PS --> VS: estoque OK
+deactivate PS
+
+VS -> DB: INSERT INTO vendas\n(status='PENDENTE', comanda_id)
+VS -> DB: INSERT INTO movimentacoes_estoque (SAIDA)
+
+VS -> PS: diminuirEstoque(produtoId, quantidade)
+activate PS
+PS -> DB: UPDATE produtos SET estoque -= quantidade
+deactivate PS
+
+VS -> DB: UPDATE contas_cliente\nSET saldo_devedor += valor
+VS -> DB: UPDATE contas_cliente\nSET status = 'INADIMPLENTE'
+
+VS --> VC: GenericResponse<String>("Item adicionado", 200)
+deactivate VS
+
+VC --> FE: HTTP 200 OK
+deactivate VC
+
+== Fluxo: Fechamento de Comanda ==
+
+FE -> VC: POST /comandas/{id}/fechar\n{metodoPagamento}
+activate VC
+
+VC -> VS: fecharComanda(comandaId, metodoPagamento)
+activate VS
+
+VS -> DB: SELECT * FROM comandas WHERE id = comandaId
+VS -> DB: SELECT * FROM vendas WHERE comanda_id = comandaId
+
+alt Pagamento Total
+  VS -> DB: UPDATE vendas\nSET status='PAGO', metodo_pagamento
+  VS -> DB: UPDATE contas_cliente\nSET saldo_devedor = 0, status='ATIVO'
+  VS -> CS: atualizarFaturamento(caixaId, totalVendas)
+  activate CS
+  CS -> DB: UPDATE caixas SET faturamento_dia += total
+  deactivate CS
+else Pagamento Parcial
+  VS -> DB: UPDATE contas_cliente\nSET saldo_devedor -= valorPago
+  VS -> DB: UPDATE vendas (distribuir pagamento)
+  VS -> CS: atualizarFaturamento(caixaId, valorPago)
+  activate CS
+  CS -> DB: UPDATE caixas SET faturamento_dia += valorPago
+  deactivate CS
+end
+
+VS -> DB: UPDATE comandas SET status='FECHADA'
+
+VS --> VC: GenericResponse<String>("Comanda fechada", 200)
+deactivate VS
+
+VC --> FE: HTTP 200 OK
+deactivate VC
+
+== Fluxo: Pagamento de Conta Cliente ==
+
+FE -> VC: POST /clientes/{id}/pagamento\n{valor, metodoPagamento}
+activate VC
+
+VC -> VS: pagarContaCliente(clienteId, pagamentoRequest)
+activate VS
+
+VS -> DB: SELECT * FROM contas_cliente WHERE id = clienteId
+VS -> DB: SELECT * FROM vendas\nWHERE conta_cliente_id = clienteId\nAND status='PENDENTE'\nORDER BY data_hora
+
+loop Distribuir pagamento nas vendas
+  VS -> DB: UPDATE vendas\nSET total_pago += valor, status
+end
+
+VS -> DB: UPDATE contas_cliente\nSET saldo_devedor -= valor
+
+alt Saldo Zerado
+  VS -> DB: UPDATE contas_cliente\nSET status='ATIVO'
+end
+
+VS -> CS: registrarPagamento(valor, metodoPagamento)
+activate CS
+CS -> DB: UPDATE caixas SET faturamento_dia += valor
+deactivate CS
+
+VS --> VC: GenericResponse<String>("Pagamento registrado", 200)
+deactivate VS
+
+VC --> FE: HTTP 200 OK
+deactivate VC
+
+== Fluxo: Registro de Compra ==
+
+FE -> VC: POST /compras\n{produtos, metodoPagamento}
+activate VC
+
+VC -> VS: addCompra(compraRequest)
+activate VS
+
+VS -> DB: INSERT INTO compras
+
+loop Para cada produto
+  VS -> DB: INSERT INTO movimentacoes_estoque (ENTRADA)
+  VS -> PS: aumentarEstoque(produtoId, quantidade)
+  activate PS
+  PS -> DB: UPDATE produtos SET estoque += quantidade
+  deactivate PS
+end
+
+VS -> DB: UPDATE compras SET total_compra = SUM(movimentacoes)
+
+VS --> VC: GenericResponse<String>("Compra registrada", 201)
+deactivate VS
+
+VC --> FE: HTTP 201 Created
+deactivate VC
+
+== Fluxo: Abertura de Caixa ==
+
+FE -> VC: POST /caixa\n{valorInicial}
+activate VC
+
+VC -> CS: abrirCaixa(caixaRequest)
+activate CS
+
+CS -> DB: SELECT * FROM caixas WHERE status='ABERTO'
+
+alt Já existe caixa aberto
+  CS --> VC: GenericResponse<String>("Erro: Caixa já aberto", 400)
+else Pode abrir
+  CS -> DB: INSERT INTO caixas\n(valor_inicial, status='ABERTO',\nfaturamento_dia=0)
+  CS --> VC: GenericResponse<String>("Caixa aberto", 201)
+end
+
+deactivate CS
+
+VC --> FE: HTTP 201 Created ou 400 Bad Request
+deactivate VC
+
+== Fluxo: Fechamento de Caixa ==
+
+FE -> VC: PUT /caixa/{id}/fechar
+activate VC
+
+VC -> CS: fecharCaixa(caixaId)
+activate CS
+
+CS -> DB: SELECT * FROM caixas WHERE id = caixaId
+CS -> DB: SELECT COUNT(*) FROM comandas\nWHERE caixa_id = caixaId\nAND status='ABERTA'
+
+alt Existem comandas abertas
+  CS --> VC: GenericResponse<String>("Erro: Comandas abertas", 400)
+else Pode fechar
+  CS -> DB: UPDATE caixas\nSET status='FECHADO',\nvalor_total = valor_inicial + faturamento_dia
+  CS --> VC: GenericResponse<CaixaResponse>(caixa, 200)
+end
+
+deactivate CS
+
+VC --> FE: HTTP 200 OK ou 400 Bad Request
+deactivate VC
+
+@enduml
