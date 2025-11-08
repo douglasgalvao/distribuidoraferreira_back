@@ -1,0 +1,241 @@
+@startuml Distribuidora Ferreira - Modelo de Entidades
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor<<PK>> LightCoral
+  BackgroundColor<<FK>> LightBlue
+}
+
+title Modelo de Entidades - Sistema Distribuidora Ferreira
+
+' ==================== ENTIDADES ====================
+
+class Produto {
+  **produto_id: Long <<PK>>**
+  cod_barras: String <<UK>>
+  nome: String
+  preco: Double
+  preco_consumo: Double
+  img: String
+  imgID: String
+  estoque: Integer
+  estoque_minimo: Integer
+  **categoria_id: Long <<FK>>**
+  --
+  + aumentarQuantidadeEstoque(int)
+  + diminuirQuantidadeEstoque(int)
+}
+
+class Categoria {
+  **categoria_id: Long <<PK>>**
+  nome: String
+}
+
+class MovimentacaoEstoque {
+  **id_movimentacao: Long <<PK>>**
+  quantidade: Integer
+  horario_registro: Timestamp
+  tipo: TipoMovimentacao
+  observacao: String
+  valor_total_movimentacao: Double
+  preco_unitario: Double
+  **produto_id: Long <<FK>>**
+  **compra_id: Long <<FK>>**
+  **venda_id: Long <<FK>>**
+  --
+  + calcularValorTotalMovimentacao(): Double
+}
+
+enum TipoMovimentacao {
+  ENTRADA
+  SAIDA
+  PERDA
+}
+
+class Venda {
+  **venda_id: Long <<PK>>**
+  data_hora: Timestamp
+  metodo_pagamento: String
+  total_venda: Double
+  total_pago: Double
+  total_pago_pix: Double
+  total_pago_debito: Double
+  total_pago_credito: Double
+  total_pago_dinheiro: Double
+  status_venda: StatusVenda
+  **caixa_id: Long <<FK>>**
+  **comanda_id: Long <<FK>>**
+  **conta_cliente_id: Long <<FK>>**
+  --
+  + calcularValorTotal(): Double
+}
+
+enum StatusVenda {
+  PAGO
+  PENDENTE
+  CANCELADO
+}
+
+class Compra {
+  **compra_id: Long <<PK>>**
+  data_hora: Timestamp
+  total_compra: Double
+  metodo_pagamento: MetodoPagamento
+  --
+  + calcularValorTotal(): Double
+}
+
+enum MetodoPagamento {
+  PIX
+  DINHEIRO
+  DEBITO
+  CREDITO
+  MISTO
+}
+
+class Caixa {
+  **caixa_id: Long <<PK>>**
+  data_hora: Timestamp
+  status: StatusCaixa
+  valor_inicial: Double
+  faturamento_dia: Double
+  valor_total: Double
+}
+
+enum StatusCaixa {
+  ABERTO
+  FECHADO
+}
+
+class ContaCliente {
+  **conta_cliente_id: Long <<PK>>**
+  nome_cliente: String
+  telefone: String
+  status: StatusCliente
+  saldo_devedor: Double
+  total_pago: Double
+  total_pago_pix: Double
+  total_pago_debito: Double
+  total_pago_credito: Double
+  total_pago_dinheiro: Double
+}
+
+enum StatusCliente {
+  ATIVO
+  INADIMPLENTE
+  BLOQUEADO
+}
+
+class Comanda {
+  **comanda_id: Long <<PK>>**
+  data_hora: Timestamp
+  status: StatusComanda
+  **caixa_id: Long <<FK>>**
+  **conta_cliente_id: Long <<FK>>**
+}
+
+enum StatusComanda {
+  ABERTA
+  FECHADA
+  CANCELADA
+}
+
+' ==================== RELACIONAMENTOS ====================
+
+' Produto <-> Categoria
+Produto "N" -- "1" Categoria : pertence a >
+
+' Produto <-> MovimentacaoEstoque
+Produto "1" -- "N" MovimentacaoEstoque : possui >
+
+' MovimentacaoEstoque <-> TipoMovimentacao
+MovimentacaoEstoque "N" -- "1" TipoMovimentacao : tem tipo >
+
+' MovimentacaoEstoque <-> Compra
+Compra "1" -- "N" MovimentacaoEstoque : contém >
+
+' MovimentacaoEstoque <-> Venda
+Venda "1" -- "N" MovimentacaoEstoque : contém >
+
+' Venda <-> StatusVenda
+Venda "N" -- "1" StatusVenda : possui status >
+
+' Venda <-> Caixa
+Caixa "1" -- "N" Venda : registra >
+
+' Venda <-> ContaCliente
+ContaCliente "1" -- "N" Venda : possui >
+
+' Venda <-> Comanda
+Comanda "1" -- "N" Venda : agrupa >
+
+' Comanda <-> StatusComanda
+Comanda "N" -- "1" StatusComanda : possui status >
+
+' Comanda <-> ContaCliente
+ContaCliente "1" -- "N" Comanda : possui >
+
+' ContaCliente <-> StatusCliente
+ContaCliente "N" -- "1" StatusCliente : possui status >
+
+' Compra <-> MetodoPagamento
+Compra "N" -- "1" MetodoPagamento : pago com >
+
+' Caixa <-> StatusCaixa
+Caixa "N" -- "1" StatusCaixa : possui status >
+
+' ==================== NOTAS EXPLICATIVAS ====================
+
+note right of Produto
+  **Produto**: Itens do estoque
+  - Controla quantidade disponível
+  - Possui dois preços: venda e consumo (comanda)
+  - Imagens armazenadas no Uploadcare
+end note
+
+note right of MovimentacaoEstoque
+  **MovimentacaoEstoque**: Histórico completo
+  - ENTRADA: Compras de fornecedores
+  - SAIDA: Vendas para clientes
+  - PERDA: Produtos danificados/vencidos
+  - Calcula valor total automaticamente
+end note
+
+note right of Venda
+  **Venda**: Transações de saída
+  - Pode ser à vista ou fiado (conta cliente)
+  - Suporta múltiplos métodos de pagamento
+  - Vinculada a um caixa aberto
+  - Pode fazer parte de uma comanda
+end note
+
+note right of Comanda
+  **Comanda**: Conta aberta no estabelecimento
+  - Agrupa múltiplas vendas
+  - Vinculada a um cliente
+  - Fechamento gera venda total
+end note
+
+note right of ContaCliente
+  **ContaCliente**: Clientes com crédito
+  - Rastreia saldo devedor
+  - Controla pagamentos por método
+  - Status muda conforme pagamentos
+end note
+
+note right of Caixa
+  **Caixa**: Controle financeiro diário
+  - Um caixa aberto por vez
+  - Registra todas as vendas do dia
+  - Calcula faturamento automaticamente
+end note
+
+note right of Compra
+  **Compra**: Aquisição de mercadorias
+  - Gera movimentações de ENTRADA
+  - Aumenta estoque automaticamente
+  - Registra método de pagamento
+end note
+
+@enduml

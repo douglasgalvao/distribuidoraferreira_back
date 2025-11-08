@@ -1,0 +1,228 @@
+@startuml Nova Arquitetura - Comandas e Mesas
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+title Nova Arquitetura Proposta - Sistema de Comandas, Mesas e Clientes
+
+' ==================== ENTIDADES PRINCIPAIS ====================
+
+class Cliente {
+  **cliente_id: Long <<PK>>**
+  nome: String
+  telefone: String
+  cpf: String <<UK>>
+  email: String
+  data_cadastro: Timestamp
+  ativo: Boolean
+  observacoes: String
+  --
+  Informações do cliente
+  Pode ter múltiplas comandas
+}
+
+class Mesa {
+  **mesa_id: Long <<PK>>**
+  numero: Integer <<UK>>
+  capacidade: Integer
+  localizacao: String
+  status: StatusMesa
+  ativo: Boolean
+  --
+  Representa mesa física
+  Status: LIVRE, OCUPADA, RESERVADA
+}
+
+enum StatusMesa {
+  LIVRE
+  OCUPADA
+  RESERVADA
+  MANUTENCAO
+}
+
+class Comanda {
+  **comanda_id: Long <<PK>>**
+  codigo: String <<UK>>
+  data_abertura: Timestamp
+  data_fechamento: Timestamp
+  status: StatusComanda
+  tipo: TipoComanda
+  observacoes: String
+  **mesa_id: Long <<FK>>**
+  **caixa_id: Long <<FK>>**
+  --
+  Pode ter ou não mesa
+  Tipos: BALCAO, MESA, DELIVERY
+}
+
+enum StatusComanda {
+  ABERTA
+  FECHADA
+  CANCELADA
+}
+
+enum TipoComanda {
+  BALCAO
+  MESA
+  DELIVERY
+}
+
+class ComandaCliente {
+  **comanda_cliente_id: Long <<PK>>**
+  **comanda_id: Long <<FK>>**
+  **cliente_id: Long <<FK>>**
+  percentual_divisao: Double
+  principal: Boolean
+  data_vinculo: Timestamp
+  --
+  Relacionamento N:N
+  Permite múltiplos clientes por comanda
+  Permite divisão de conta
+}
+
+class Venda {
+  **venda_id: Long <<PK>>**
+  data_hora: Timestamp
+  metodo_pagamento: String
+  total_venda: Double
+  total_pago: Double
+  status_venda: StatusVenda
+  **comanda_id: Long <<FK>>**
+  **comanda_cliente_id: Long <<FK>>**
+  **caixa_id: Long <<FK>>**
+  --
+  Vinculada a comanda
+  Pode ser atribuída a cliente específico
+}
+
+class ContaCliente {
+  **conta_cliente_id: Long <<PK>>**
+  **cliente_id: Long <<FK>>**
+  data_abertura: Timestamp
+  data_fechamento: Timestamp
+  saldo_devedor: Double
+  total_consumido: Double
+  limite_credito: Double
+  status: StatusConta
+  --
+  Crédito do cliente
+  Independente de comandas
+}
+
+enum StatusConta {
+  ATIVA
+  SUSPENSA
+  BLOQUEADA
+  QUITADA
+}
+
+class Pagamento {
+  **pagamento_id: Long <<PK>>**
+  **conta_cliente_id: Long <<FK>>**
+  **venda_id: Long <<FK>>**
+  data_pagamento: Timestamp
+  valor: Double
+  metodo_pagamento: String
+  observacoes: String
+  --
+  Registra pagamentos
+  Pode quitar vendas ou conta
+}
+
+class Caixa {
+  **caixa_id: Long <<PK>>**
+  data_hora: Timestamp
+  status: StatusCaixa
+  valor_inicial: Double
+  faturamento_dia: Double
+  valor_total: Double
+}
+
+' ==================== RELACIONAMENTOS ====================
+
+' Cliente <-> ComandaCliente <-> Comanda (N:N)
+Cliente "1" -- "N" ComandaCliente : possui >
+Comanda "1" -- "N" ComandaCliente : tem >
+
+' Mesa <-> Comanda (1:1 opcional)
+Mesa "1" -left- "0..N" Comanda : pode ter >
+
+' Comanda <-> Venda (1:N)
+Comanda "1" -- "N" Venda : agrupa >
+
+' ComandaCliente <-> Venda (1:N)
+ComandaCliente "1" -- "N" Venda : responsável >
+
+' Cliente <-> ContaCliente (1:N)
+Cliente "1" -- "N" ContaCliente : possui >
+
+' ContaCliente <-> Pagamento (1:N)
+ContaCliente "1" -- "N" Pagamento : recebe >
+
+' Venda <-> Pagamento (1:N)
+Venda "1" -- "0..N" Pagamento : quitada por >
+
+' Caixa <-> Comanda (1:N)
+Caixa "1" -- "N" Comanda : registra >
+
+' Caixa <-> Venda (1:N)
+Caixa "1" -- "N" Venda : registra >
+
+' ==================== NOTAS ====================
+
+note right of Cliente
+  **Cliente**: Pessoa física
+  - Cadastro único
+  - Pode participar de N comandas
+  - Pode ter histórico de crédito
+  - CPF único (opcional)
+end note
+
+note right of Mesa
+  **Mesa**: Física do estabelecimento
+  - Número único
+  - Pode estar livre, ocupada, reservada
+  - Uma comanda por vez
+  - Status independente
+end note
+
+note right of Comanda
+  **Comanda**: Conta aberta
+  - Pode ser: Balcão, Mesa, Delivery
+  - Mesa é OPCIONAL
+  - Múltiplos clientes (divisão)
+  - Código único para identificação
+end note
+
+note right of ComandaCliente
+  **ComandaCliente**: Relacionamento N:N
+  - Cliente principal (quem abriu)
+  - Percentual de divisão da conta
+  - Rastreia quem participa
+  - Permite divisão inteligente
+end note
+
+note right of ContaCliente
+  **ContaCliente**: Crédito do cliente
+  - Independente de comandas
+  - Saldo devedor acumulado
+  - Limite de crédito
+  - Histórico de pagamentos
+end note
+
+note right of Venda
+  **Venda**: Transação individual
+  - Vinculada à comanda
+  - Pode ser atribuída a cliente específico
+  - Permite rastreio detalhado
+end note
+
+note bottom of Pagamento
+  **Pagamento**: Registro financeiro
+  - Quita vendas específicas
+  - Abate saldo de conta
+  - Múltiplos métodos
+  - Auditoria completa
+end note
+
+@enduml

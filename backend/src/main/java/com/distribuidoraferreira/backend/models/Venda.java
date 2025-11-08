@@ -66,24 +66,28 @@ public class Venda {
     private Double totalPagoDinheiro;
 
     @OneToMany(mappedBy = "venda", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<MovimentacaoEstoque> movimentacoesEstoque;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "comanda_id")
     private Comanda comanda;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "caixa_id")
+    @JoinColumn(name = "comanda_cliente_id")
+    private ComandaCliente comandaCliente;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "caixa_id", nullable = false)
     private Caixa caixa;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status_venda", nullable = false)
     private StatusVenda status;
 
-    @JsonIgnoreProperties(value = { "vendas" })
-    @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @JoinColumn(name = "conta_cliente_id")
-    private ContaCliente contaCliente;
+    @OneToMany(mappedBy = "venda", cascade = CascadeType.ALL)
+    @JsonIgnore
+    private List<Pagamento> pagamentos;
 
     @PrePersist
     public void prePersist() {

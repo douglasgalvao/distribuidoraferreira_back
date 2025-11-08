@@ -1,0 +1,126 @@
+@startuml Distribuidora Ferreira - Arquitetura
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+skinparam shadowing false
+
+title Sistema de Gestão - Distribuidora Ferreira (Arquitetura em Camadas)
+
+actor "Usuário\nFuncionário" as usuario #LightBlue
+
+package "Sistema Distribuidora Ferreira" {
+    
+    component "Frontend Angular" as frontend #LightGreen {
+        [Interface Web Responsiva]
+        [Angular 17 + TypeScript]
+    }
+    
+    package "Backend Spring Boot" as backend #LightYellow {
+        
+        package "Controllers (REST API)" {
+            [Produto Controller] as produtoController
+            [Venda Controller] as vendaController
+            [Compra Controller] as compraController
+            [Comanda Controller] as comandaController
+            [Cliente Controller] as clienteController
+            [Caixa Controller] as caixaController
+        }
+        
+        package "Services (Business Logic)" {
+            [Produto Service] as produtoService
+            [Venda Service] as vendaService
+            [Compra Service] as compraService
+            [Comanda Service] as comandaService
+            [Cliente Service] as clienteService
+            [Caixa Service] as caixaService
+            [Movimentação Service] as movimentacaoService
+        }
+        
+        package "Repositories (Data Access)" {
+            [Produto Repository] as produtoRepo
+            [Venda Repository] as vendaRepo
+            [Compra Repository] as compraRepo
+            [Comanda Repository] as comandaRepo
+            [Cliente Repository] as clienteRepo
+            [Caixa Repository] as caixaRepo
+            [Movimentação Repository] as movimentacaoRepo
+            [Categoria Repository] as categoriaRepo
+        }
+    }
+    
+    database "PostgreSQL\nDatabase" as database #LightCoral {
+        [8 Tabelas Principais]
+        [Relacionamentos]
+        [Heroku Postgres]
+    }
+}
+
+cloud "Serviços Externos" {
+    [Heroku Platform] as heroku #Orange
+    [Uploadcare\nImagens] as uploadcare #Pink
+}
+
+' Relações
+usuario -down-> frontend : "Utiliza\nHTTPS"
+
+frontend -down-> produtoController : "REST/JSON"
+frontend -down-> vendaController : "REST/JSON"
+frontend -down-> compraController : "REST/JSON"
+frontend -down-> comandaController : "REST/JSON"
+frontend -down-> clienteController : "REST/JSON"
+frontend -down-> caixaController : "REST/JSON"
+
+produtoController -down-> produtoService
+vendaController -down-> vendaService
+compraController -down-> compraService
+comandaController -down-> comandaService
+clienteController -down-> clienteService
+caixaController -down-> caixaService
+
+produtoService -down-> produtoRepo
+produtoService -down-> categoriaRepo
+vendaService -down-> vendaRepo
+vendaService -down-> movimentacaoRepo
+vendaService -down-> caixaRepo
+compraService -down-> compraRepo
+comandaService -down-> comandaRepo
+clienteService -down-> clienteRepo
+caixaService -down-> caixaRepo
+
+produtoRepo -down-> database : "JDBC"
+vendaRepo -down-> database : "JDBC"
+compraRepo -down-> database : "JDBC"
+comandaRepo -down-> database : "JDBC"
+clienteRepo -down-> database : "JDBC"
+caixaRepo -down-> database : "JDBC"
+movimentacaoRepo -down-> database : "JDBC"
+categoriaRepo -down-> database : "JDBC"
+
+backend .up.> heroku : "Hospedado"
+database .up.> heroku : "Gerenciado"
+frontend .right.> uploadcare : "Upload Imagens"
+
+note right of frontend
+  **Frontend Angular 17**
+  - Interface responsiva
+  - Gestão completa
+  - Upload de imagens
+end note
+
+note right of backend
+  **Backend Spring Boot 3.2.3**
+  - Java 17
+  - Arquitetura em camadas
+  - REST API completo
+  - JPA + Hibernate
+end note
+
+note right of database
+  **PostgreSQL 14+**
+  - 8 Entidades
+  - Auditoria completa
+  - Heroku Essential 0
+  - 10k rows max
+end note
+
+@enduml

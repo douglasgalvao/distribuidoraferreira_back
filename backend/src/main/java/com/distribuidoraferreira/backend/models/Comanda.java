@@ -1,22 +1,10 @@
 package com.distribuidoraferreira.backend.models;
 
 import com.distribuidoraferreira.backend.enums.StatusComanda;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.distribuidoraferreira.backend.enums.TipoComanda;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OneToOne;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -25,8 +13,7 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
-
-import jakarta.persistence.OneToMany;
+import java.util.UUID;
 
 @Entity
 @Table(name = "comandas")
@@ -35,36 +22,92 @@ import jakarta.persistence.OneToMany;
 @Getter
 @Setter
 public class Comanda {
+    
     @Id
-    @Column(name = "comanda_id", nullable = false)
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "comanda_id")
     private Long id;
 
-    @Column(name = "data_hora", columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-    private Date dataHora;
+    @Column(name = "codigo", unique = true, nullable = false)
+    private String codigo;
+
+    @Column(name = "data_abertura", nullable = false)
+    private Date dataAbertura;
+
+    @Column(name = "data_fechamento")
+    private Date dataFechamento;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
     private StatusComanda status;
 
-    @Column(name = "caixa_Id")
-    private Long idCaixa;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo", nullable = false)
+    private TipoComanda tipo;
 
-    @Column(name = "conta_cliente_id")
-    private Long idCliente;
+    @Column(name = "observacoes", length = 500)
+    private String observacoes;
 
-    @OneToMany(mappedBy = "comanda", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Venda> venda;
+    // Relacionamentos
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "mesa_id")
+    private Mesa mesa;
 
-    public void addVenda(Venda venda) {
-        venda.setComanda(this);
-        this.venda.add(venda);
-    }
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "caixa_id", nullable = false)
+    private Caixa caixa;
+
+    @OneToMany(mappedBy = "comanda", cascade = CascadeType.ALL)
+    @JsonIgnore
+    private List<ComandaCliente> comandasClientes;
+
+    @OneToMany(mappedBy = "comanda", cascade = CascadeType.ALL)
+    @JsonIgnore
+    private List<Venda> vendas;
 
     @PrePersist
     public void prePersist() {
-        if (this.dataHora == null) {
-            this.dataHora = Date.from(Instant.now()); // Valor padrão
+        if (this.dataAbertura == null) {
+            this.dataAbertura = Date.from(Instant.now());
+        }
+        if (this.status == null) {
+            this.status = StatusComanda.ABERTA;
+        }
+        if (this.codigo == null) {
+            this.codigo = gerarCodigo();
         }
     }
 
+    private String gerarCodigo() {
+        // Gera código único: CMD-YYYYMMDD-XXXX
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        String uuid = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
+        return "CMD-" + timestamp.substring(timestamp.length() - 8) + "-" + uuid;
+    }
+
+    public void fechar() {
+        this.status = StatusComanda.FECHADA;
+        this.dataFechamento = Date.from(Instant.now());
+        if (this.mesa != null) {
+            this.mesa.liberar();
+        }
+    }
+
+    public void cancelar() {
+        this.status = StatusComanda.CANCELADA;
+        this.dataFechamento = Date.from(Instant.now());
+        if (this.mesa != null) {
+            this.mesa.liberar();
+        }
+    }
+
+    public void adicionarCliente(ComandaCliente comandaCliente) {
+        this.comandasClientes.add(comandaCliente);
+        comandaCliente.setComanda(this);
+    }
+
+    public void adicionarVenda(Venda venda) {
+        this.vendas.add(venda);
+        venda.setComanda(this);
+    }
 }

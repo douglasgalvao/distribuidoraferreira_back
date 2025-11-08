@@ -1,31 +1,20 @@
 package com.distribuidoraferreira.backend.models;
 
-import com.distribuidoraferreira.backend.enums.StatusCliente;
-import com.distribuidoraferreira.backend.enums.StatusVenda;
-import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.distribuidoraferreira.backend.enums.StatusConta;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
+import java.util.Date;
 import java.util.List;
 
 @Entity
 @Table(name = "contas_cliente")
-@JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
@@ -37,36 +26,93 @@ public class ContaCliente {
     @Column(name = "conta_cliente_id")
     private Long id;
 
-    @Column(name = "nome_cliente", nullable = false)
-    private String nomeCliente;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cliente_id", nullable = false)
+    private Cliente cliente;
 
-    @Column(name = "telefone", nullable = false)
-    private String telefone;
+    @Column(name = "data_abertura", nullable = false)
+    private Date dataAbertura;
+
+    @Column(name = "data_fechamento")
+    private Date dataFechamento;
+
+    @Column(name = "saldo_devedor", nullable = false)
+    private Double saldoDevedor = 0.0;
+
+    @Column(name = "total_consumido", nullable = false)
+    private Double totalConsumido = 0.0;
+
+    @Column(name = "limite_credito")
+    private Double limiteCredito;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    private StatusCliente status;
+    private StatusConta status;
 
-    @Column(name = "saldo_devedor", nullable = true)
-    private Double saldoDevedor;
-
+    // Relacionamentos
     @OneToMany(mappedBy = "contaCliente", cascade = CascadeType.ALL)
     @JsonIgnore
-    private List<Venda> vendas;
+    private List<Pagamento> pagamentos;
 
-    @Column(name = "total_pago", nullable = true)
-    private Double totalPago;
+    @PrePersist
+    public void prePersist() {
+        if (this.dataAbertura == null) {
+            this.dataAbertura = Date.from(Instant.now());
+        }
+        if (this.status == null) {
+            this.status = StatusConta.ATIVA;
+        }
+        if (this.saldoDevedor == null) {
+            this.saldoDevedor = 0.0;
+        }
+        if (this.totalConsumido == null) {
+            this.totalConsumido = 0.0;
+        }
+    }
 
-    @Column(name = "total_pago_pix", nullable = true)
-    private Double totalPagoPix;
+    public void adicionarDebito(Double valor) {
+        this.saldoDevedor += valor;
+        this.totalConsumido += valor;
+        verificarStatus();
+    }
 
-    @Column(name = "total_pago_debito", nullable = true)
-    private Double totalPagoDebito;
+    public void realizarPagamento(Double valor) {
+        this.saldoDevedor -= valor;
+        if (this.saldoDevedor < 0) {
+            this.saldoDevedor = 0.0;
+        }
+        verificarStatus();
+    }
 
-    @Column(name = "total_pago_credito", nullable = true)
-    private Double totalPagoCredito;
+    private void verificarStatus() {
+        if (this.saldoDevedor == 0) {
+            this.status = StatusConta.QUITADA;
+        } else if (this.limiteCredito != null && this.saldoDevedor >= this.limiteCredito) {
+            this.status = StatusConta.BLOQUEADA;
+        } else {
+            this.status = StatusConta.ATIVA;
+        }
+    }
 
-    @Column(name = "total_pago_dinheiro", nullable = true)
-    private Double totalPagoDinheiro;
+    public void suspender() {
+        this.status = StatusConta.SUSPENSA;
+    }
 
+    public void bloquear() {
+        this.status = StatusConta.BLOQUEADA;
+    }
+
+    public void reativar() {
+        this.status = StatusConta.ATIVA;
+    }
+
+    public boolean podeComprar() {
+        if (this.status == StatusConta.BLOQUEADA || this.status == StatusConta.SUSPENSA) {
+            return false;
+        }
+        if (this.limiteCredito != null && this.saldoDevedor >= this.limiteCredito) {
+            return false;
+        }
+        return true;
+    }
 }
